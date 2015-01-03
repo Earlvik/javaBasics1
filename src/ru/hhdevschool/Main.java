@@ -1,10 +1,12 @@
 package ru.hhdevschool;
 
-import java.io.BufferedReader;
-import java.io.FileReader;
-import java.io.IOException;
+import java.io.*;
+import java.nio.ByteBuffer;
+import java.nio.MappedByteBuffer;
+import java.nio.channels.FileChannel;
 import java.nio.charset.Charset;
 import java.nio.file.Files;
+import java.nio.file.OpenOption;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.*;
@@ -16,28 +18,32 @@ public class Main {
 
         //Getting info from file
         String filename = args[0];
-        BufferedReader bufferedReader =new BufferedReader(new FileReader(filename));
-        String line;
+        FileInputStream fis = new FileInputStream(filename);
+        FileChannel channel = fis.getChannel();
+        //String line;
 
         //Calculating total online time
-        while((line = bufferedReader.readLine()) != null){
-            String[] elements = line.split(",");
-            Date time = new Date(Integer.parseInt(elements[0].trim())*1000);
-            int id = Integer.parseInt(elements[1].trim());
-            String action = elements[2].trim();
-            if(!users.containsKey(id)){
-                users.put(id, new User(id));
+        ByteBuffer buffer = ByteBuffer.allocate(1);
+
+        StringBuffer line =new StringBuffer();
+        while(channel.read(buffer) > 0)
+        {
+            buffer.flip();
+            for (int i = 0; i < buffer.limit(); i++)
+            {
+                char ch = ((char) buffer.get());
+                if(ch=='\r'){
+                    process(line.toString());
+                    line=new StringBuffer();
+                }else{
+                    line.append(ch);
+                }
             }
-            User user = users.get(id);
-            if(action.equalsIgnoreCase("login")){
-                user.setLastLogin(time);
-                continue;
-            }
-            if(action.equalsIgnoreCase("logout")){
-                long newTime = time.getTime() - user.getLastLogin().getTime();
-                user.setTotalOnline(user.getTotalOnline() + newTime);
-            }
+            buffer.clear();
         }
+        process(line.toString());
+        channel.close();
+        fis.close();
 
         //Sorting and outputting the data
         User[] list = users.values().toArray(new User[users.size()]);
@@ -54,6 +60,25 @@ public class Main {
         }
     }
 
+
+    private static void process(String line){
+        String[] elements = line.split(",");
+        Date time = new Date(Long.parseLong(elements[0].trim())*1000);
+        int id = Integer.parseInt(elements[1].trim());
+        String action = elements[2].trim();
+        if(!users.containsKey(id)){
+            users.put(id, new User(id));
+        }
+        User user = users.get(id);
+        if(action.equalsIgnoreCase("login")){
+            user.setLastLogin(time);
+            return;
+        }
+        if(action.equalsIgnoreCase("logout")){
+            long newTime = time.getTime() - user.getLastLogin().getTime();
+            user.setTotalOnline(user.getTotalOnline() + newTime);
+        }
+    }
     static class User{
         int id;
         Date lastLogin;
